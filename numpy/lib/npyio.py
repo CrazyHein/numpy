@@ -316,6 +316,7 @@ def load(file, mmap_mode=None, allow_pickle=True, fix_imports=True,
     --------
     save, savez, savez_compressed, loadtxt
     memmap : Create a memory-map to an array stored in a file on disk.
+    lib.format.open_memmap : Create or load a memory-mapped ``.npy`` file.
 
     Notes
     -----
@@ -1329,7 +1330,7 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None,
     ----------
     fname : file, str, pathlib.Path, list of str, generator
         File, filename, list, or generator to read.  If the filename
-        extension is `.gz` or `.bz2`, the file is first decompressed. Mote
+        extension is `.gz` or `.bz2`, the file is first decompressed. Note
         that generators must return byte strings in Python 3k.  The strings
         in a list or produced by a generator are treated as lines.
     dtype : dtype, optional

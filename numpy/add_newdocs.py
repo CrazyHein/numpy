@@ -1126,7 +1126,7 @@ add_newdoc('numpy.core.multiarray', 'frombuffer',
     count : int, optional
         Number of items to read. ``-1`` means all data in the buffer.
     offset : int, optional
-        Start reading the buffer from this offset; default: 0.
+        Start reading the buffer from this offset (in bytes); default: 0.
 
     Notes
     -----
@@ -5720,7 +5720,7 @@ add_newdoc('numpy.core', 'ufunc', ('reduce',
 
 add_newdoc('numpy.core', 'ufunc', ('accumulate',
     """
-    accumulate(array, axis=0, dtype=None, out=None)
+    accumulate(array, axis=0, dtype=None, out=None, keepdims=None)
 
     Accumulate the result of applying the operator to all elements.
 
@@ -5752,6 +5752,8 @@ add_newdoc('numpy.core', 'ufunc', ('accumulate',
     out : ndarray, optional
         A location into which the result is stored. If not provided a
         freshly-allocated array is returned.
+    keepdims : bool
+        Has no effect. Deprecated, and will be removed in future.
 
     Returns
     -------
@@ -5896,7 +5898,7 @@ add_newdoc('numpy.core', 'ufunc', ('reduceat',
 
 add_newdoc('numpy.core', 'ufunc', ('outer',
     """
-    outer(A, B)
+    outer(A, B, **kwargs)
 
     Apply the ufunc `op` to all pairs (a, b) with a in `A` and b in `B`.
 
@@ -5919,6 +5921,8 @@ add_newdoc('numpy.core', 'ufunc', ('outer',
         First array
     B : array_like
         Second array
+    kwargs : any
+        Arguments to pass on to the ufunc. Typically `dtype` or `out`.
 
     Returns
     -------
@@ -6171,11 +6175,13 @@ add_newdoc('numpy.core.multiarray', 'dtype', ('char',
 
 add_newdoc('numpy.core.multiarray', 'dtype', ('descr',
     """
-    Array-interface compliant full description of the data-type.
+    PEP3118 interface description of the data-type.
 
     The format is that required by the 'descr' key in the
-    `__array_interface__` attribute.
+    PEP3118 `__array_interface__` attribute.
 
+    Warning: This attribute exists specifically for PEP3118 compliance, and
+    is not a datatype description compatible with `np.dtype`.
     """))
 
 add_newdoc('numpy.core.multiarray', 'dtype', ('fields',

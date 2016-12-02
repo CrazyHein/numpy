@@ -666,7 +666,7 @@ def assert_approx_equal(actual,desired,significant=7,err_msg='',verbose=True):
 
 
 def assert_array_compare(comparison, x, y, err_msg='', verbose=True,
-                         header='', precision=6):
+                         header='', precision=6, equal_nan=True):
     __tracebackhide__ = True  # Hide traceback for py.test
     from numpy.core import array, isnan, isinf, any, all, inf
     x = array(x, copy=False, subok=True)
@@ -724,21 +724,25 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True,
                 raise AssertionError(msg)
 
         if isnumber(x) and isnumber(y):
-            x_isnan, y_isnan = isnan(x), isnan(y)
+            if equal_nan:
+                x_isnan, y_isnan = isnan(x), isnan(y)
+                # Validate that NaNs are in the same place
+                if any(x_isnan) or any(y_isnan):
+                    chk_same_position(x_isnan, y_isnan, hasval='nan')
+
             x_isinf, y_isinf = isinf(x), isinf(y)
 
-            # Validate that the special values are in the same place
-            if any(x_isnan) or any(y_isnan):
-                chk_same_position(x_isnan, y_isnan, hasval='nan')
+            # Validate that infinite values are in the same place
             if any(x_isinf) or any(y_isinf):
                 # Check +inf and -inf separately, since they are different
                 chk_same_position(x == +inf, y == +inf, hasval='+inf')
                 chk_same_position(x == -inf, y == -inf, hasval='-inf')
 
             # Combine all the special values
-            x_id, y_id = x_isnan, y_isnan
-            x_id |= x_isinf
-            y_id |= y_isinf
+            x_id, y_id = x_isinf, y_isinf
+            if equal_nan:
+                x_id |= x_isnan
+                y_id |= y_isnan
 
             # Only do the comparison if actual values are left
             if all(x_id):
@@ -1326,7 +1330,7 @@ def _assert_valid_refcount(op):
     del d  # for pyflakes
 
 
-def assert_allclose(actual, desired, rtol=1e-7, atol=0, equal_nan=False,
+def assert_allclose(actual, desired, rtol=1e-7, atol=0, equal_nan=True,
                     err_msg='', verbose=True):
     """
     Raises an AssertionError if two objects are not equal up to desired
@@ -1381,7 +1385,7 @@ def assert_allclose(actual, desired, rtol=1e-7, atol=0, equal_nan=False,
     actual, desired = np.asanyarray(actual), np.asanyarray(desired)
     header = 'Not equal to tolerance rtol=%g, atol=%g' % (rtol, atol)
     assert_array_compare(compare, actual, desired, err_msg=str(err_msg),
-                         verbose=verbose, header=header)
+                         verbose=verbose, header=header, equal_nan=equal_nan)
 
 
 def assert_array_almost_equal_nulp(x, y, nulp=1):
@@ -2023,6 +2027,11 @@ class suppress_warnings(object):
         self._forwarding_rule = forwarding_rule
 
     def _clear_registries(self):
+        if hasattr(warnings, "_filters_mutated"):
+            # clearing the registry should not be necessary on new pythons,
+            # instead the filters should be mutated.
+            warnings._filters_mutated()
+            return
         # Simply clear the registry, this should normally be harmless,
         # note that on new pythons it would be invalidated anyway.
         for module in self._tmp_modules:
@@ -2112,6 +2121,8 @@ class suppress_warnings(object):
             raise RuntimeError("cannot enter suppress_warnings twice.")
 
         self._orig_show = warnings.showwarning
+        if hasattr(warnings, "_showwarnmsg"):
+            self._orig_showmsg = warnings._showwarnmsg
         self._filters = warnings.filters
         warnings.filters = self._filters[:]
 
@@ -2135,20 +2146,29 @@ class suppress_warnings(object):
                     module=module_regex)
                 self._tmp_modules.add(mod)
         warnings.showwarning = self._showwarning
+        if hasattr(warnings, "_showwarnmsg"):
+            warnings._showwarnmsg = self._showwarnmsg
         self._clear_registries()
 
         return self
 
     def __exit__(self, *exc_info):
         warnings.showwarning = self._orig_show
+        if hasattr(warnings, "_showwarnmsg"):
+            warnings._showwarnmsg = self._orig_showmsg
         warnings.filters = self._filters
         self._clear_registries()
         self._entered = False
         del self._orig_show
         del self._filters
 
+    def _showwarnmsg(self, msg):
+        self._showwarning(msg.message, msg.category, msg.filename, msg.lineno,
+                          msg.file, msg.line, use_warnmsg=msg)
+
     def _showwarning(self, message, category, filename, lineno,
                      *args, **kwargs):
+        use_warnmsg = kwargs.pop("use_warnmsg", None)
         for cat, _, pattern, mod, rec in (
                 self._suppressions + self._tmp_suppressions)[::-1]:
             if (issubclass(category, cat) and
@@ -2175,8 +2195,11 @@ class suppress_warnings(object):
         # There is no filter in place, so pass to the outside handler
         # unless we should only pass it once
         if self._forwarding_rule == "always":
-            self._orig_show(message, category, filename, lineno,
-                            *args, **kwargs)
+            if use_warnmsg is None:
+                self._orig_show(message, category, filename, lineno,
+                                *args, **kwargs)
+            else:
+                self._orig_showmsg(use_warnmsg)
             return
 
         if self._forwarding_rule == "once":
@@ -2189,7 +2212,11 @@ class suppress_warnings(object):
         if signature in self._forwarded:
             return
         self._forwarded.add(signature)
-        self._orig_show(message, category, filename, lineno, *args, **kwargs)
+        if use_warnmsg is None:
+            self._orig_show(message, category, filename, lineno, *args,
+                            **kwargs)
+        else:
+            self._orig_showmsg(use_warnmsg)
 
     def __call__(self, func):
         """

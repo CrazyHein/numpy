@@ -173,6 +173,44 @@ class TestOut(TestCase):
                 assert_(w[0].category is DeprecationWarning)
 
 
+class TestComparisons(TestCase):
+    def test_ignore_object_identity_in_equal(self):
+        # Check error raised when comparing identical objects whose comparison
+        # is not a simple boolean, e.g., arrays that are compared elementwise.
+        a = np.array([np.array([1, 2, 3]), None], dtype=object)
+        assert_raises(ValueError, np.equal, a, a)
+
+        # Check error raised when comparing identical non-comparable objects.
+        class FunkyType(object):
+            def __eq__(self, other):
+                raise TypeError("I won't compare")
+
+        a = np.array([FunkyType()])
+        assert_raises(TypeError, np.equal, a, a)
+
+        # Check identity doesn't override comparison mismatch.
+        a = np.array([np.nan], dtype=object)
+        assert_equal(np.equal(a, a), [False])
+
+    def test_ignore_object_identity_in_not_equal(self):
+        # Check error raised when comparing identical objects whose comparison
+        # is not a simple boolean, e.g., arrays that are compared elementwise.
+        a = np.array([np.array([1, 2, 3]), None], dtype=object)
+        assert_raises(ValueError, np.not_equal, a, a)
+
+        # Check error raised when comparing identical non-comparable objects.
+        class FunkyType(object):
+            def __ne__(self, other):
+                raise TypeError("I won't compare")
+
+        a = np.array([FunkyType()])
+        assert_raises(TypeError, np.not_equal, a, a)
+
+        # Check identity doesn't override comparison mismatch.
+        a = np.array([np.nan], dtype=object)
+        assert_equal(np.not_equal(a, a), [True])
+
+
 class TestDivision(TestCase):
     def test_division_int(self):
         # int division should follow Python
@@ -426,16 +464,54 @@ class TestPower(TestCase):
 
     def test_integer_power(self):
         a = np.array([15, 15], 'i8')
-        b = a ** a
+        b = np.power(a, a)
         assert_equal(b, [437893890380859375, 437893890380859375])
 
-    def test_integer_power_with_zero_exponent(self):
-        arr = np.arange(-10, 10)
-        assert_equal(np.power(arr, 0), np.ones_like(arr))
+    def test_integer_power_with_integer_zero_exponent(self):
+        dtypes = np.typecodes['Integer']
+        for dt in dtypes:
+            arr = np.arange(-10, 10, dtype=dt)
+            assert_equal(np.power(arr, 0), np.ones_like(arr))
+
+        dtypes = np.typecodes['UnsignedInteger']
+        for dt in dtypes:
+            arr = np.arange(10, dtype=dt)
+            assert_equal(np.power(arr, 0), np.ones_like(arr))
 
     def test_integer_power_of_1(self):
-        arr = np.arange(-10, 10)
-        assert_equal(np.power(1, arr), np.ones_like(arr))
+        dtypes = np.typecodes['AllInteger']
+        for dt in dtypes:
+            arr = np.arange(10, dtype=dt)
+            assert_equal(np.power(1, arr), np.ones_like(arr))
+
+    def test_integer_power_of_zero(self):
+        dtypes = np.typecodes['AllInteger']
+        for dt in dtypes:
+            arr = np.arange(1, 10, dtype=dt)
+            assert_equal(np.power(0, arr), np.zeros_like(arr))
+
+    def test_integer_to_negative_power(self):
+        dtypes = np.typecodes['Integer']
+        for dt in dtypes:
+            a = np.array([0, 1, 2, 3], dtype=dt)
+            b = np.array([0, 1, 2, -3], dtype=dt)
+            one = np.array(1, dtype=dt)
+            minusone = np.array(-1, dtype=dt)
+            assert_raises(ValueError, np.power, a, b)
+            assert_raises(ValueError, np.power, a, minusone)
+            assert_raises(ValueError, np.power, one, b)
+            assert_raises(ValueError, np.power, one, minusone)
+
+
+class TestFloat_power(TestCase):
+    def test_type_conversion(self):
+        arg_type = '?bhilBHILefdgFDG'
+        res_type = 'ddddddddddddgDDG'
+        for dtin, dtout in zip(arg_type, res_type):
+            msg = "dtin: %s, dtout: %s" % (dtin, dtout)
+            arg = np.ones(1, dtype=dtin)
+            res = np.float_power(arg, arg)
+            assert_(res.dtype.name == np.dtype(dtout).name, msg)
 
 
 class TestLog2(TestCase):
@@ -964,6 +1040,11 @@ class TestFmin(_FilterInvalids):
 
 
 class TestBool(TestCase):
+    def test_exceptions(self):
+        a = np.ones(1, dtype=np.bool_)
+        assert_raises(TypeError, np.negative, a)
+        assert_raises(TypeError, np.subtract, a, a)
+
     def test_truth_table_logical(self):
         # 2, 3 and 4 serves as true values
         input1 = [0, 0, 3, 2]

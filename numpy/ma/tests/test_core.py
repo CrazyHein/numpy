@@ -1,4 +1,4 @@
-# pylint: disable-msg=W0401,W0511,W0611,W0612,W0614,R0201,E1102
+# pylint: disable-msg=W0400,W0511,W0611,W0612,W0614,R0201,E1102
 """Tests suite for MaskedArray & subclassing.
 
 :author: Pierre Gerard-Marchant
@@ -1361,19 +1361,18 @@ class TestMaskedArrayArithmetic(TestCase):
         # With partial mask
         with suppress_warnings() as sup:
             sup.filter(FutureWarning, "Comparison to `None`")
-            a = array([1, 2], mask=[0, 1])
-            assert_equal(a == None, False)
-            assert_equal(a.data == None, False)
-            assert_equal(a.mask == None, False)
-            assert_equal(a != None, True)
+            a = array([None, 1], mask=[0, 1])
+            assert_equal(a == None, array([True, False], mask=[0, 1]))
+            assert_equal(a.data == None, [True, False])
+            assert_equal(a != None, array([False, True], mask=[0, 1]))
             # With nomask
-            a = array([1, 2], mask=False)
-            assert_equal(a == None, False)
-            assert_equal(a != None, True)
+            a = array([None, 1], mask=False)
+            assert_equal(a == None, [True, False])
+            assert_equal(a != None, [False, True])
             # With complete mask
-            a = array([1, 2], mask=True)
-            assert_equal(a == None, False)
-            assert_equal(a != None, True)
+            a = array([None, 2], mask=True)
+            assert_equal(a == None, array([False, True], mask=True))
+            assert_equal(a != None, array([True, False], mask=True))
             # Fully masked, even comparison to None should return "masked"
             a = masked
             assert_equal(a == None, masked)
@@ -3353,6 +3352,22 @@ class TestMaskedArrayMathMethods(TestCase):
         assert_almost_equal(z.filled(0), [[1, 0], [15, 16]])
         assert_almost_equal(z.mask, [[0, 1], [0, 0]])
 
+    def test_varmean_nomask(self):
+        # gh-5769
+        foo = array([1,2,3,4], dtype='f8')
+        bar = array([1,2,3,4], dtype='f8')
+        assert_equal(type(foo.mean()), np.float64)
+        assert_equal(type(foo.var()), np.float64)
+        assert((foo.mean() == bar.mean()) is np.bool_(True))
+
+        # check array type is preserved and out works
+        foo = array(np.arange(16).reshape((4,4)), dtype='f8')
+        bar = empty(4, dtype='f4')
+        assert_equal(type(foo.mean(axis=1)), MaskedArray)
+        assert_equal(type(foo.var(axis=1)), MaskedArray)
+        assert_(foo.mean(axis=1, out=bar) is bar)
+        assert_(foo.var(axis=1, out=bar) is bar)
+
     def test_varstd(self):
         # Tests var & std on MaskedArrays.
         (x, X, XX, m, mx, mX, mXX, m2x, m2X, m2XX) = self.d
@@ -4069,6 +4084,25 @@ class TestMaskedArrayFunctions(TestCase):
 
         test = np.ma.compressed(M(shape=(0,1,2)))
         assert_equal(test, 42)
+
+    def test_convolve(self):
+        a = masked_equal(np.arange(5), 2)
+        b = np.array([1, 1])
+        test = np.ma.convolve(a, b)
+        assert_equal(test, masked_equal([0, 1, -1, -1, 7, 4], -1))
+
+        test = np.ma.convolve(a, b, propagate_mask=False)
+        assert_equal(test, masked_equal([0, 1, 1, 3, 7, 4], -1))
+
+        test = np.ma.convolve([1, 1], [1, 1, 1])
+        assert_equal(test, masked_equal([1, 2, 2, 1], -1))
+
+        a = [1, 1]
+        b = masked_equal([1, -1, -1, 1], -1)
+        test = np.ma.convolve(a, b, propagate_mask=False)
+        assert_equal(test, masked_equal([1, 1, -1, 1, 1], -1))
+        test = np.ma.convolve(a, b, propagate_mask=True)
+        assert_equal(test, masked_equal([-1, -1, -1, -1, -1], -1))
 
 
 class TestMaskedFields(TestCase):
